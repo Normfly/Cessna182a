@@ -586,8 +586,12 @@
         this.Update();
     }
 
+    getCurrentPageIndex() {
+        return this.pages.indexOf(this.currentPage);
+    }
+
     nextPage() {
-        const currentIndex = this.pages.indexOf(this.currentPage);
+        const currentIndex = this.getCurrentPageIndex();
         // Only advance if not at the last page
         if (currentIndex < this.pages.length - 1) {
             this.currentPage = this.pages[currentIndex + 1];
@@ -596,7 +600,7 @@
     }
 
     previousPage() {
-        const currentIndex = this.pages.indexOf(this.currentPage);
+        const currentIndex = this.getCurrentPageIndex();
         // Only go back if not at the first page
         if (currentIndex > 0) {
             this.currentPage = this.pages[currentIndex - 1];
@@ -1462,11 +1466,12 @@
         const startX = (canvasW - totalWidth) / 2;
         
         // Get current page index
-        const currentIndex = this.pages.indexOf(this.currentPage);
+        const currentIndex = this.getCurrentPageIndex();
         
         ctx.save();
         
         // Draw each dot
+        ctx.fillStyle = "#ffffff";
         for (let i = 0; i < this.pages.length; i++) {
             const x = startX + i * dotSpacing;
             const y = topMargin;
@@ -1474,16 +1479,8 @@
             ctx.beginPath();
             ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
             
-            // Active page: brighter white
-            // Inactive pages: dim white
-            if (i === currentIndex) {
-                ctx.fillStyle = "#ffffff";
-                ctx.globalAlpha = 1.0;
-            } else {
-                ctx.fillStyle = "#ffffff";
-                ctx.globalAlpha = 0.3;
-            }
-            
+            // Active page: brighter white (1.0), inactive pages: dim white (0.3)
+            ctx.globalAlpha = (i === currentIndex) ? 1.0 : 0.3;
             ctx.fill();
         }
         
