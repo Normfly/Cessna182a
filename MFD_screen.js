@@ -588,13 +588,19 @@
 
     nextPage() {
         const currentIndex = this.pages.indexOf(this.currentPage);
-        this.currentPage = this.pages[(currentIndex + 1) % this.pages.length];
+        // Only advance if not at the last page
+        if (currentIndex < this.pages.length - 1) {
+            this.currentPage = this.pages[currentIndex + 1];
+        }
         this.Update();
     }
 
     previousPage() {
         const currentIndex = this.pages.indexOf(this.currentPage);
-        this.currentPage = this.pages[(currentIndex - 1 + this.pages.length) % this.pages.length];
+        // Only go back if not at the first page
+        if (currentIndex > 0) {
+            this.currentPage = this.pages[currentIndex - 1];
+        }
         this.Update();
     }
 
@@ -1440,6 +1446,50 @@
         ctx.restore();
     }
 
+    drawPagingDots(ctx) {
+        if (!ctx || !this.canvas) return;
+        
+        // Only draw dots if there are multiple pages
+        if (this.pages.length <= 1) return;
+
+        const canvasW = this.canvas.width;
+        const dotRadius = 4;
+        const dotSpacing = 14;
+        const topMargin = 15;
+        
+        // Calculate total width needed for all dots
+        const totalWidth = (this.pages.length - 1) * dotSpacing;
+        const startX = (canvasW - totalWidth) / 2;
+        
+        // Get current page index
+        const currentIndex = this.pages.indexOf(this.currentPage);
+        
+        ctx.save();
+        
+        // Draw each dot
+        for (let i = 0; i < this.pages.length; i++) {
+            const x = startX + i * dotSpacing;
+            const y = topMargin;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
+            
+            // Active page: brighter white
+            // Inactive pages: dim white
+            if (i === currentIndex) {
+                ctx.fillStyle = "#ffffff";
+                ctx.globalAlpha = 1.0;
+            } else {
+                ctx.fillStyle = "#ffffff";
+                ctx.globalAlpha = 0.3;
+            }
+            
+            ctx.fill();
+        }
+        
+        ctx.restore();
+    }
+
     Update() {
         this.getSimVars();
         this.followTRK();
@@ -1482,6 +1532,7 @@
         }
 
         this.drawBezel(ctx, w, h);
+        this.drawPagingDots(ctx); // Draw paging status dots
         this.drawTouchBoxes(ctx, true); // Ensure touch boxes are drawn and selectable on both pages.
         this.drawTASBox(ctx); // Other universal functionality.
     }
