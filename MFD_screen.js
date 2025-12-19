@@ -1574,64 +1574,188 @@ class MFD_screen extends (typeof BaseInstrument !== "undefined" ? BaseInstrument
         // Clear canvas
         ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-        // Draw magenta airplane in the center
+        // Get aircraft position from SimVar or use test values
+        let aircraftLat, aircraftLon;
+        if (typeof SimVar !== "undefined" && typeof SimVar.GetSimVarValue === "function") {
+            aircraftLat = SimVar.GetSimVarValue("PLANE LATITUDE", "degrees");
+            aircraftLon = SimVar.GetSimVarValue("PLANE LONGITUDE", "degrees");
+        } else {
+            // Test mode: use default position
+            aircraftLat = window.testAircraftLat || 47.0;
+            aircraftLon = window.testAircraftLon || -122.0;
+        }
+
+        // Map scale: pixels per nautical mile (adjustable)
+        const scale = 10; // 10 pixels = 1 NM
+
+        // Save context for rotating map
         ctx.save();
         ctx.translate(centerX, centerY);
-        ctx.rotate((Math.PI / 180) * -this.heading); // Rotate based on heading
-        ctx.fillStyle = "magenta";
-        ctx.beginPath();
-        ctx.moveTo(0, -20); // Nose of the airplane
-        ctx.lineTo(10, 0);
-        ctx.lineTo(0, 20); // Tail
-        ctx.lineTo(-10, 0);
-        ctx.closePath();
-        ctx.fill();
+        ctx.rotate(-this.heading * Math.PI / 180); // Rotate map based on heading
+
+        // Draw compass rose (rotates with map)
+        this.drawMapCompassRose(ctx, 0, 0, Math.min(canvasWidth, canvasHeight) * 0.43);
+
+        // Calculate and draw waypoint positions
+        const prevPos = this.calculateMapWaypointPosition(
+            this.previousWaypointLat, this.previousWaypointLon,
+            aircraftLat, aircraftLon, scale
+        );
+        const nextPos = this.calculateMapWaypointPosition(
+            this.nextWaypointLat, this.nextWaypointLon,
+            aircraftLat, aircraftLon, scale
+        );
+        const nextNextPos = this.calculateMapWaypointPosition(
+            this.nextNextWaypointLat, this.nextNextWaypointLon,
+            aircraftLat, aircraftLon, scale
+        );
+
+        // Draw course lines
+        if (prevPos && nextPos) {
+            // Magenta line from previous to next waypoint
+            this.drawMapPath(ctx, prevPos, nextPos, "#e049b0", 2);
+        }
+        if (nextPos && nextNextPos) {
+            // Light blue line from next to next-next waypoint
+            this.drawMapPath(ctx, nextPos, nextNextPos, "#87ceeb", 2);
+        }
+
+        // Draw waypoints as blue triangles
+        if (prevPos) {
+            this.drawMapWaypoint(ctx, prevPos.x, prevPos.y, "#4169e1");
+        }
+        if (nextPos) {
+            this.drawMapWaypoint(ctx, nextPos.x, nextPos.y, "#4169e1");
+        }
+        if (nextNextPos) {
+            this.drawMapWaypoint(ctx, nextNextPos.x, nextNextPos.y, "#4169e1");
+        }
+
         ctx.restore();
 
-        // Calculate waypoint positions
-        const previousWaypointPos = this.calculateWaypointPosition(this.previousWaypointLat, this.previousWaypointLon);
-        const nextWaypointPos = this.calculateWaypointPosition(this.nextWaypointLat, this.nextWaypointLon);
-        const nextNextWaypointPos = this.calculateWaypointPosition(this.nextNextWaypointLat, this.nextNextWaypointLon);
-
-        // Draw waypoints (blue triangles)
-        this.drawWaypoint(ctx, previousWaypointPos.x, previousWaypointPos.y, "blue");
-        this.drawWaypoint(ctx, nextWaypointPos.x, nextWaypointPos.y, "blue");
-        this.drawWaypoint(ctx, nextNextWaypointPos.x, nextNextWaypointPos.y, "blue");
-
-        // Draw paths between waypoints
-        this.drawPath(ctx, previousWaypointPos, nextWaypointPos, "magenta");
-        this.drawPath(ctx, nextWaypointPos, nextNextWaypointPos, "lightblue");
+        // Draw centered magenta airplane symbol (does not rotate with map)
+        this.drawMapAirplane(ctx, centerX, centerY);
     }
 
-    calculateWaypointPosition(lat, lon) {
-        // Simplified method to calculate relative positions on canvas
-        // Normalize lat/lon and map them to screen coordinates
-        const canvasWidth = this.canvas.width;
-        const canvasHeight = this.canvas.height;
+    calculateMapWaypointPosition(waypointLat, waypointLon, aircraftLat, aircraftLon, scale) {
+        // Return null if waypoint data is invalid
+        if (waypointLat == null || waypointLon == null || !isFinite(waypointLat) || !isFinite(waypointLon)) {
+            return null;
+        }
+        if (aircraftLat == null || aircraftLon == null || !isFinite(aircraftLat) || !isFinite(aircraftLon)) {
+            return null;
+        }
 
-        const x = canvasWidth / 2 + (lon % 360); // Adjust as per scale
-        const y = canvasHeight / 2 - (lat % 360); // Adjust as per scale
+        // Calculate relative position in nautical miles
+        // 1 degree latitude ≈ 60 NM
+        // 1 degree longitude ≈ 60 * cos(latitude) NM
+        const latDiff = waypointLat - aircraftLat;
+        const lonDiff = waypointLon - aircraftLon;
+
+        const latNM = latDiff * 60; // North-South distance in NM
+        const latCos = Math.cos(aircraftLat * Math.PI / 180); // Cache cosine calculation
+        const lonNM = lonDiff * 60 * latCos; // East-West distance in NM
+
+        // Convert to screen coordinates (before rotation)
+        // North is up (negative Y), East is right (positive X)
+        const x = lonNM * scale;
+        const y = -latNM * scale;
 
         return { x, y };
     }
 
-    drawWaypoint(ctx, x, y, color) {
+    drawMapWaypoint(ctx, x, y, color) {
+        // Draw blue triangle pointing up
+        ctx.save();
         ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(x, y - 10); // Triangle tip
-        ctx.lineTo(x + 5, y + 5); // Bottom right
-        ctx.lineTo(x - 5, y + 5); // Bottom left
-        ctx.closePath();
-        ctx.fill();
-    }
-
-    drawPath(ctx, startPos, endPos, color) {
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y - 8); // Top point
+        ctx.lineTo(x + 7, y + 6); // Bottom right
+        ctx.lineTo(x - 7, y + 6); // Bottom left
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    drawMapPath(ctx, startPos, endPos, color, lineWidth) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
         ctx.beginPath();
         ctx.moveTo(startPos.x, startPos.y);
         ctx.lineTo(endPos.x, endPos.y);
         ctx.stroke();
+        ctx.restore();
+    }
+
+    drawMapAirplane(ctx, x, y) {
+        // Draw centered magenta airplane symbol
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.fillStyle = "#e049b0"; // Magenta
+        ctx.strokeStyle = "#e049b0";
+        ctx.lineWidth = 2;
+
+        // Draw airplane shape (cross with pointed nose)
+        ctx.beginPath();
+        // Fuselage (vertical line)
+        ctx.moveTo(0, -15);
+        ctx.lineTo(0, 15);
+        // Wings (horizontal line)
+        ctx.moveTo(-15, 0);
+        ctx.lineTo(15, 0);
+        // Tail stabilizer
+        ctx.moveTo(-8, 12);
+        ctx.lineTo(8, 12);
+        ctx.stroke();
+
+        // Nose dot
+        ctx.beginPath();
+        ctx.arc(0, -15, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    drawMapCompassRose(ctx, x, y, radius) {
+        // Draw compass rose overlay on map
+        ctx.save();
+        ctx.translate(x, y);
+
+        // Draw compass card from image if available
+        const img = this.images.compassImg;
+        if (img && img.complete && img.naturalWidth > 0) {
+            ctx.drawImage(img, -radius, -radius, radius * 2, radius * 2);
+        } else {
+            // Fallback: draw simple compass markings
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+            ctx.lineWidth = 1;
+
+            // Draw cardinal direction lines
+            for (let i = 0; i < 4; i++) {
+                const angle = i * Math.PI / 2;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(Math.sin(angle) * radius * 0.9, -Math.cos(angle) * radius * 0.9);
+                ctx.stroke();
+            }
+
+            // Draw tick marks every 30 degrees
+            for (let i = 0; i < 12; i++) {
+                const angle = i * Math.PI / 6;
+                const innerRadius = radius * 0.85;
+                const outerRadius = radius * 0.95;
+                ctx.beginPath();
+                ctx.moveTo(Math.sin(angle) * innerRadius, -Math.cos(angle) * innerRadius);
+                ctx.lineTo(Math.sin(angle) * outerRadius, -Math.cos(angle) * outerRadius);
+                ctx.stroke();
+            }
+        }
+
+        ctx.restore();
     }
 
 
