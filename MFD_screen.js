@@ -1639,10 +1639,10 @@ class MFD_screen extends (typeof BaseInstrument !== "undefined" ? BaseInstrument
 
     calculateMapWaypointPosition(waypointLat, waypointLon, aircraftLat, aircraftLon, scale) {
         // Return null if waypoint data is invalid
-        if (!waypointLat || !waypointLon || !isFinite(waypointLat) || !isFinite(waypointLon)) {
+        if (waypointLat == null || waypointLon == null || !isFinite(waypointLat) || !isFinite(waypointLon)) {
             return null;
         }
-        if (!aircraftLat || !aircraftLon || !isFinite(aircraftLat) || !isFinite(aircraftLon)) {
+        if (aircraftLat == null || aircraftLon == null || !isFinite(aircraftLat) || !isFinite(aircraftLon)) {
             return null;
         }
 
@@ -1653,7 +1653,8 @@ class MFD_screen extends (typeof BaseInstrument !== "undefined" ? BaseInstrument
         const lonDiff = waypointLon - aircraftLon;
 
         const latNM = latDiff * 60; // North-South distance in NM
-        const lonNM = lonDiff * 60 * Math.cos(aircraftLat * Math.PI / 180); // East-West distance in NM
+        const latCos = Math.cos(aircraftLat * Math.PI / 180); // Cache cosine calculation
+        const lonNM = lonDiff * 60 * latCos; // East-West distance in NM
 
         // Convert to screen coordinates (before rotation)
         // North is up (negative Y), East is right (positive X)
